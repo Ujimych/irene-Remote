@@ -1,4 +1,4 @@
-Клиент для [голосового ассистента Ирина] (https://github.com/janvarev/Irene-Voice-Assistant)в модификации от [AlexeyBond] (https://github.com/AlexeyBond/Irene-Voice-Assistant) предназначенный для устройств поддерживающих python, таких как raspberry pi.
+Клиент для [голосового ассистента Ирина] (https://github.com/janvarev/Irene-Voice-Assistant) в модификации от [AlexeyBond] (https://github.com/AlexeyBond/Irene-Voice-Assistant) предназначенный для устройств поддерживающих python, таких как raspberry pi.
 Для лучшего захвата звука рекомендую использование платы расширения [ReSpeaker 2-Mics Pi HAT] (https://wiki.seeedstudio.com/ReSpeaker_2_Mics_Pi_HAT_Raspberry/), но возможно использование других микрофонов
 
 ## Основной функционал:
