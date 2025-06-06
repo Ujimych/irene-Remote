@@ -18,7 +18,15 @@ sudo apt-get install python3-dev libffi-dev gcc make portaudio19-dev
 
 клонируйте клиент 
 ```bash
-git clone https://github.com/Ujimych/irene-Remote/client irene-Remote
+mkdir temp-repo && cd temp-repo
+git init
+git remote add origin https://github.com/Ujimych/irene-Remote.git
+git config core.sparsecheckout true
+echo "client/" > .git/info/sparse-checkout
+git pull --depth=1 origin main
+mv client ../irene-Remote
+cd 
+rm -rf temp-repo
 ```
 
 В папке проекта создадим все необходимое для виртуального окружения
