@@ -25,6 +25,6 @@ MT_OUT_VOLUME_COMMAND = f'{PROTOCOL_OUT_VOLUME}/command'
 MT_OUT_VOLUME_RESULT = f'{PROTOCOL_OUT_VOLUME}/result'
 
 
-
+После копирования файлов и внесения изменений, обязательно перезапускаем сервер Ирины
 
 
