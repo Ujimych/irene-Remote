@@ -1,74 +1,166 @@
-import sounddevice
-import soundfile
-import urllib.request
-import tempfile
 import logging
+import os
+import subprocess
+import tempfile
+import urllib.request
+
+import soundfile
+
 
 class Player:
-    def __init__(self, in_config):
-        self.config = {
-            'protocol': 'https://',
-            'host': in_config["host"],
-            'port': in_config["port"],
-            'device': in_config["device_output"],              # Устройство воспроизведения
-            'blocksize': in_config["blocksize_output"],        # Размер блока
-            'dtype': in_config["dtype_output"],                # Тип данных
-            'samplerate': in_config["samplerate_output"],      # Частота дискретизации
-            'channels': in_config["channels_output"]           # Количество каналов (моно)
-        }
 
-        self._logger = logging.getLogger('Player')
+    def __init__(self, in_config):
+        self.host = in_config["host"]
+        self.port = in_config["port"]
+
+        self.alsa_device = "plughw:CARD=seeed2micvoicec,DEV=0"
+
+        self._logger = logging.getLogger("Player")
         self._logger.setLevel(logging.DEBUG)
 
-        # Добавляем обработчик для вывода в консоль
-        console_handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(formatter)
-        self._logger.addHandler(console_handler)
+        if not self._logger.handlers:
+            console_handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                "%(asctime)s - %(levelname)s - %(message)s"
+            )
+            console_handler.setFormatter(formatter)
+            self._logger.addHandler(console_handler)
 
-    def play(self, in_gateway, in_playback_id, in_path):
-        self._logger.debug(f"play >>> playback_id: {in_playback_id}")
+    def play(
+        self,
+        in_gateway,
+        in_playback_id,
+        in_path,
+        in_mpdPlayer
+    ):
+        self._logger.debug(
+            f"play >>> playback_id: {in_playback_id}"
+        )
 
-        if self.config['device'] == "":
-            self._logger.exception("Устройство захвата звука НЕ задано!")
-
-        cache_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-        audio_url = f"{self.config['protocol']}{self.config['host']}:{self.config['port']}{in_path}"
-        audio_data = urllib.request.urlopen(audio_url, context=in_gateway.ssl_context).read()
-        with open(cache_file, 'wb') as output:
-            output.write(audio_data)
+        cache_file = None
+        mpd_was_playing = False
 
         try:
-            with soundfile.SoundFile(cache_file) as f:
-                self._logger.debug(f'Частота [Гц]: {f.samplerate}, Длительность: {round(len(f)/f.samplerate)} сек.')
-                block_size = self.config['blocksize']
-                num_channels = f.channels
-                dtype = self.config['dtype']
+            cache_file = tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".wav"
+            ).name
 
-                # Прямая загрузка аудиофайлов и воспроизведение через RawOutputStream
-                with sounddevice.RawOutputStream(
-                    samplerate=f.samplerate,
-                    blocksize=block_size,
-                    device=self.config['device'],
-                    channels=num_channels,
-                    dtype=self.config['dtype']
-                ) as stream:
-                    while True:
-                        # Чтение данных из файла блоками
-                        data = f.buffer_read(block_size, dtype)
-                        if not data:
-                            break
-                        # Непосредственно выводим данные
-                        stream.write(data)
-                        
-            self._logger.debug("Воспроизведение закончено.")
+            audio_url = (
+                f"https://{self.host}:{self.port}{in_path}"
+            )
+
+            self._logger.debug(
+                f"Загрузка аудио: {audio_url}"
+            )
+
+            audio_data = urllib.request.urlopen(
+                audio_url,
+                context=in_gateway.ssl_context
+            ).read()
+
+            with open(cache_file, "wb") as output:
+                output.write(audio_data)
+
+            self._logger.debug(
+                f"Получено аудио: {len(audio_data)} байт"
+            )
+
+            with soundfile.SoundFile(cache_file) as audio_file:
+                source_samplerate = audio_file.samplerate
+                source_channels = audio_file.channels
+                source_subtype = audio_file.subtype
+                duration = len(audio_file) / source_samplerate
+
+                self._logger.debug(
+                    f"WAV: {source_samplerate} Гц, "
+                    f"{source_channels} канал(а), "
+                    f"{source_subtype}, "
+                    f"длительность: {duration:.2f} сек."
+                )
+
+                if in_mpdPlayer is not None:
+                    mpd_was_playing = (
+                        in_mpdPlayer.pause_for_voice()
+                    )
+
+                    self._logger.debug(
+                        f"MPD перед голосом играл: "
+                        f"{mpd_was_playing}"
+                    )
+
+                self._logger.debug(
+                    f"Воспроизведение через ALSA: "
+                    f"{self.alsa_device}"
+                )
+
+                result = subprocess.run(
+                    [
+                        "aplay",
+                        "-D",
+                        self.alsa_device,
+                        cache_file
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+
+                if result.returncode != 0:
+                    self._logger.error(
+                        f"aplay завершился с ошибкой: "
+                        f"код={result.returncode}"
+                    )
+
+                    if result.stderr:
+                        self._logger.error(
+                            f"aplay stderr: "
+                            f"{result.stderr.strip()}"
+                        )
+
+                    raise RuntimeError(
+                        "Ошибка воспроизведения через ALSA aplay"
+                    )
+
+                self._logger.debug(
+                    "Аудиоустройство успешно "
+                    "воспроизвело WAV."
+                )
+
+            self._logger.debug(
+                "Воспроизведение закончено."
+            )
 
         except Exception as e:
-            self._logger.exception(f"Возникла ошибка воспроизведения: {e}")
+            self._logger.exception(
+                f"Возникла ошибка воспроизведения: {e}"
+            )
+
         finally:
-            # Удаляем временный файл
-            try:
-                import os
-                os.remove(cache_file)
-            except OSError:
-                pass
+            if mpd_was_playing and in_mpdPlayer is not None:
+                self._logger.debug(
+                    "Восстанавливаем MPD после "
+                    "голосового ответа."
+                )
+
+                try:
+                    in_mpdPlayer.resume_after_voice()
+
+                except Exception as e:
+                    self._logger.exception(
+                        f"Ошибка восстановления MPD: {e}"
+                    )
+
+            if cache_file is not None:
+                try:
+                    os.remove(cache_file)
+
+                    self._logger.debug(
+                        "Временный WAV удалён."
+                    )
+
+                except OSError as e:
+                    self._logger.debug(
+                        f"Не удалось удалить "
+                        f"временный WAV: {e}"
+                    )
