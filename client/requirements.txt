@@ -1,7 +1,6 @@
-cffi==1.17.1
-pycparser==2.22
-PyYAML==6.0.2
+python-mpd2==3.1.1
+PyYAML==6.0.3
 RPi.GPIO==0.7.1
-sounddevice==0.4.7
-soundfile==0.12.1
-websockets==11.0.3
+sounddevice==0.5.6
+soundfile==0.14.0
+websockets==17.0.1
