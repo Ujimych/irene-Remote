@@ -1,37 +1,68 @@
-import yaml
 import asyncio
+
+import yaml
 
 import gateway as net
 import recorder as voice
 import player as audio
+import mpd_player
+import volume_control
 
-# Читаем конфигурационный файл
-with open('config.yaml', 'r') as f:
-    config = yaml.safe_load(f)
+
+with open("config.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
 
 async def main():
-    voiceRecorder = voice.Recorder( config )
-    audioPlayer = audio.Player( config )
+    voice_recorder = voice.Recorder(config)
+    audio_player = audio.Player(config)
 
-    netGateway = net.Gateway( config, '/api/face_web/ws', voiceRecorder, audioPlayer)
+    mpd_player_instance = mpd_player.MpdPlayer(
+        host="localhost",
+        port=6600,
+        volume_step=10
+    )
 
-    await netGateway.connect()  # Устанавливаем соединение с сервером
+    volume_control_instance = volume_control.VolumeControl(
+        volume_step=10
+    )
+
+    gateway = net.Gateway(
+        config,
+        "/api/face_web/ws",
+        voice_recorder,
+        audio_player,
+        mpd_player_instance,
+        volume_control_instance
+    )
+
+    await gateway.connect()
 
     try:
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1)
 
-            # response = input("Введите команду или Q/q для выхода: ")
-            # if response in ('', 'q', 'Q'):
-            #     break
-        
     finally:
-        await netGateway.close()  # Закрываем соединение при завершении
-        netGateway.task_listen_incoming.cancel()  # Останавливаем фоновый процесс приема входящих сообщений
+        voice_recorder.resume(False)
 
-        for task in netGateway.tasks_listen_recorder:
+        if gateway.task_listen_incoming is not None:
+            gateway.task_listen_incoming.cancel()
+
+        if gateway.task_listen_second_connection is not None:
+            gateway.task_listen_second_connection.cancel()
+
+        for task in gateway.tasks_listen_recorder:
             task.cancel()
-        netGateway.tasks_listen_recorder.clear()  # очищаем список задач
+
+        gateway.tasks_listen_recorder.clear()
+
+        await gateway.close()
+
+        mpd_player_instance.close()
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Завершение программы.")
