@@ -24,7 +24,7 @@ async def main():
     )
 
     volume_control_instance = volume_control.VolumeControl(
-        volume_step=10
+        config
     )
 
     gateway = net.Gateway(
