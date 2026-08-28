@@ -9,3 +9,15 @@ blocksize_input: 8000
 dtype_input: 'int16'
 samplerate_input: 48000
 channels_input: 1
+
+# Volume control
+volume_step: 5
+
+mixer:
+  card: '1'
+  control: 'Speaker'
+
+volume:
+  min: 0
+  middle: 112
+  max: 127
