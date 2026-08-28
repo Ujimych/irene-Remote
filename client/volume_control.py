@@ -10,14 +10,15 @@ class VolumeControl:
     Seeed 2-Mic Voice Card.
     """
 
-    MIN_VOLUME = 0
-    MIDDLE_VOLUME = 112
-    MAX_VOLUME = 127
+    def __init__(self, in_config):
+        self.volume_step = in_config["volume_step"]
 
-    def __init__(self, volume_step=10):
-        self.volume_step = volume_step
-        self.mixer_card = "1"
-        self.mixer_control = "Speaker"
+        self.mixer_card = in_config["mixer"]["card"]
+        self.mixer_control = in_config["mixer"]["control"]
+
+        self.min_volume = in_config["volume"]["min"]
+        self.middle_volume = in_config["volume"]["middle"]
+        self.max_volume = in_config["volume"]["max"]
 
         self._logger = logging.getLogger("VolumeControl")
         self._logger.setLevel(logging.DEBUG)
@@ -32,7 +33,8 @@ class VolumeControl:
             console_handler.setFormatter(formatter)
             self._logger.addHandler(console_handler)
 
-        self.set_volume(self.MIDDLE_VOLUME)
+        # При запуске клиента устанавливаем среднюю громкость.
+        self.set_volume(self.middle_volume)
 
     def get_volume(self):
         """Получить текущую громкость Speaker."""
@@ -79,11 +81,11 @@ class VolumeControl:
             return None
 
     def set_volume(self, volume):
-        """Установить громкость Speaker в диапазоне 0..127."""
+        """Установить громкость Speaker."""
         try:
             volume = max(
-                self.MIN_VOLUME,
-                min(self.MAX_VOLUME, int(volume))
+                self.min_volume,
+                min(self.max_volume, int(volume))
             )
 
             subprocess.run(
@@ -122,7 +124,7 @@ class VolumeControl:
             return False
 
         new_volume = min(
-            self.MAX_VOLUME,
+            self.max_volume,
             current_volume + self.volume_step
         )
 
@@ -136,7 +138,7 @@ class VolumeControl:
             return False
 
         new_volume = max(
-            self.MIN_VOLUME,
+            self.min_volume,
             current_volume - self.volume_step
         )
 
@@ -144,20 +146,20 @@ class VolumeControl:
 
     def volume_mute(self):
         """Установить минимальную громкость."""
-        return self.set_volume(self.MIN_VOLUME)
+        return self.set_volume(self.min_volume)
 
     def volume_unmute(self):
         """Восстановить среднюю громкость."""
-        return self.set_volume(self.MIDDLE_VOLUME)
+        return self.set_volume(self.middle_volume)
 
     def volume_min(self):
         """Установить минимальную громкость."""
-        return self.set_volume(self.MIN_VOLUME)
+        return self.set_volume(self.min_volume)
 
     def volume_middle(self):
         """Установить среднюю громкость."""
-        return self.set_volume(self.MIDDLE_VOLUME)
+        return self.set_volume(self.middle_volume)
 
     def volume_max(self):
         """Установить максимальную громкость."""
-        return self.set_volume(self.MAX_VOLUME)
+        return self.set_volume(self.max_volume)
