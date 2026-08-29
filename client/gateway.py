@@ -18,6 +18,7 @@ class Gateway:
         in_mpdPlayer,
         in_volumeControl
     ):
+
         self.host = in_config["host"]
         self.port = in_config["port"]
         self.path = in_path
@@ -27,7 +28,9 @@ class Gateway:
         self.mpdPlayer = in_mpdPlayer
         self.volumeControl = in_volumeControl
 
-        self.samplerate = in_config["samplerate_input"]
+        self.samplerate = in_config[
+            "samplerate_input"
+        ]
 
         self.websocket = None
 
@@ -35,80 +38,125 @@ class Gateway:
         self.task_listen_second_connection = None
         self.tasks_listen_recorder = []
 
+        # ------------------------------------------------------
         # Ожидание ответа на команду.
+        # ------------------------------------------------------
+
         self.command_pending = False
         self.command_blink_task = None
 
-        self.ssl_context = ssl.create_default_context()
-        self.ssl_context.check_hostname = False
-        self.ssl_context.verify_mode = ssl.CERT_NONE
+        # ------------------------------------------------------
+        # SSL
+        # ------------------------------------------------------
 
-        self._logger = logging.getLogger("Gateway")
-        self._logger.setLevel(logging.DEBUG)
+        self.ssl_context = (
+            ssl.create_default_context()
+        )
+
+        self.ssl_context.check_hostname = False
+
+        self.ssl_context.verify_mode = (
+            ssl.CERT_NONE
+        )
+
+        # ------------------------------------------------------
+        # Логирование
+        # ------------------------------------------------------
+
+        self._logger = logging.getLogger(
+            "Gateway"
+        )
+
+        self._logger.setLevel(
+            logging.DEBUG
+        )
 
         if not self._logger.handlers:
-            console_handler = logging.StreamHandler()
+
+            console_handler = (
+                logging.StreamHandler()
+            )
 
             formatter = logging.Formatter(
                 "%(asctime)s - %(levelname)s - %(message)s"
             )
 
-            console_handler.setFormatter(formatter)
-            self._logger.addHandler(console_handler)
+            console_handler.setFormatter(
+                formatter
+            )
 
-        GPIO.setmode(GPIO.BCM)
+            self._logger.addHandler(
+                console_handler
+            )
+
+        # ------------------------------------------------------
+        # GPIO
+        # ------------------------------------------------------
+
+        GPIO.setmode(
+            GPIO.BCM
+        )
 
         self.LED_PIN = 13
-        GPIO.setup(self.LED_PIN, GPIO.OUT)
+
+        GPIO.setup(
+            self.LED_PIN,
+            GPIO.OUT
+        )
 
         # LED ON = нет соединения с сервером.
         self.led_on = True
-        GPIO.output(self.LED_PIN, GPIO.HIGH)
 
-        self._logger.debug("Светодиод включен")
+        GPIO.output(
+            self.LED_PIN,
+            GPIO.HIGH
+        )
+
+        self._logger.debug(
+            "Светодиод включен"
+        )
 
     # ==========================================================
     # Индикация ожидания ответа
     # ==========================================================
 
     def start_command_blink(self):
-        """
-        Запускает мигание светодиода во время ожидания ответа
-        на команду.
-        """
 
         self.command_pending = True
 
         if self.command_blink_task is None:
+
             self._logger.debug(
-                "Начинаем мигание: ожидание ответа от сервера."
+                "Начинаем мигание: "
+                "ожидание ответа от сервера."
             )
 
-            self.command_blink_task = asyncio.create_task(
-                self._command_blink()
+            self.command_blink_task = (
+                asyncio.create_task(
+                    self._command_blink()
+                )
             )
 
     async def stop_command_blink(self):
-        """
-        Останавливает мигание и выключает светодиод.
-        """
 
         self.command_pending = False
 
         if self.command_blink_task is not None:
+
             self.command_blink_task.cancel()
 
             try:
+
                 await self.command_blink_task
 
             except asyncio.CancelledError:
+
                 pass
 
             self.command_blink_task = None
 
-        # Если соединение с сервером есть,
-        # после завершения команды светодиод должен быть выключен.
         if self.websocket is not None:
+
             self.led_on = False
 
             GPIO.output(
@@ -117,16 +165,15 @@ class Gateway:
             )
 
             self._logger.debug(
-                "Ответ получен. Мигание остановлено, "
+                "Ответ получен. "
+                "Мигание остановлено, "
                 "светодиод выключен."
             )
 
     async def _command_blink(self):
-        """
-        Мигание светодиода во время ожидания ответа.
-        """
 
         try:
+
             while self.command_pending:
 
                 GPIO.output(
@@ -134,7 +181,9 @@ class Gateway:
                     GPIO.HIGH
                 )
 
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(
+                    0.5
+                )
 
                 if not self.command_pending:
                     break
@@ -144,9 +193,12 @@ class Gateway:
                     GPIO.LOW
                 )
 
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(
+                    0.5
+                )
 
         except asyncio.CancelledError:
+
             raise
 
     # ==========================================================
@@ -156,10 +208,16 @@ class Gateway:
     async def connect(self):
 
         while True:
+
             try:
-                self.websocket = await websockets.connect(
-                    f"wss://{self.host}:{self.port}{self.path}",
-                    ssl=self.ssl_context
+
+                self.websocket = (
+                    await websockets.connect(
+                        f"wss://{self.host}:"
+                        f"{self.port}"
+                        f"{self.path}",
+                        ssl=self.ssl_context
+                    )
                 )
 
                 self._logger.debug(
@@ -168,7 +226,9 @@ class Gateway:
 
                 await self.send_message(
                     json.dumps({
-                        "type": "negotiate/request",
+                        "type":
+                            "negotiate/request",
+
                         "protocols": [
                             [
                                 "in.text-direct",
@@ -198,13 +258,18 @@ class Gateway:
 
                 await self.wait_first_response()
 
+                # --------------------------------------------------
                 # Соединение установлено.
+                # --------------------------------------------------
+
                 self.command_pending = False
 
                 if self.command_blink_task is not None:
+
                     await self.stop_command_blink()
 
                 if self.led_on:
+
                     self._logger.debug(
                         "Светодиод выключен"
                     )
@@ -217,6 +282,7 @@ class Gateway:
                     )
 
                 if self.task_listen_incoming is None:
+
                     self._logger.debug(
                         "Создаем задачу приема сообщений."
                     )
@@ -231,14 +297,15 @@ class Gateway:
 
             except OSError as e:
 
-                # При отсутствии соединения LED должен гореть постоянно.
                 self.command_pending = False
 
                 if self.command_blink_task is not None:
+
                     self.command_blink_task.cancel()
 
                     try:
                         await self.command_blink_task
+
                     except asyncio.CancelledError:
                         pass
 
@@ -256,17 +323,21 @@ class Gateway:
                     f"Повторная попытка через 5 секунд..."
                 )
 
-                await asyncio.sleep(5)
+                await asyncio.sleep(
+                    5
+                )
 
             except Exception as e:
 
                 self.command_pending = False
 
                 if self.command_blink_task is not None:
+
                     self.command_blink_task.cancel()
 
                     try:
                         await self.command_blink_task
+
                     except asyncio.CancelledError:
                         pass
 
@@ -284,7 +355,9 @@ class Gateway:
                     f"Повторная попытка через 5 секунд..."
                 )
 
-                await asyncio.sleep(5)
+                await asyncio.sleep(
+                    5
+                )
 
     # ==========================================================
     # Закрытие
@@ -295,17 +368,21 @@ class Gateway:
         self.command_pending = False
 
         if self.command_blink_task is not None:
+
             self.command_blink_task.cancel()
 
             try:
                 await self.command_blink_task
+
             except asyncio.CancelledError:
                 pass
 
             self.command_blink_task = None
 
         if self.websocket is not None:
+
             try:
+
                 await self.websocket.close()
 
                 self._logger.debug(
@@ -319,6 +396,7 @@ class Gateway:
                 )
 
             finally:
+
                 self.websocket = None
 
         self.led_on = True
@@ -332,13 +410,18 @@ class Gateway:
     # WebSocket
     # ==========================================================
 
-    async def send_message(self, in_message):
+    async def send_message(
+            self,
+            in_message
+    ):
 
         self._logger.debug(
             f"send_message: {in_message}"
         )
 
-        await self.websocket.send(in_message)
+        await self.websocket.send(
+            in_message
+        )
 
         self._logger.debug(
             f"отправил: {in_message}"
@@ -347,6 +430,7 @@ class Gateway:
     async def receive_message(self):
 
         try:
+
             return await self.websocket.recv()
 
         except websockets.ConnectionClosedError:
@@ -358,10 +442,12 @@ class Gateway:
             self.command_pending = False
 
             if self.command_blink_task is not None:
+
                 self.command_blink_task.cancel()
 
                 try:
                     await self.command_blink_task
+
                 except asyncio.CancelledError:
                     pass
 
@@ -382,18 +468,24 @@ class Gateway:
 
     async def wait_first_response(self):
 
-        first_response = await self.receive_message()
+        first_response = (
+            await self.receive_message()
+        )
 
         if first_response is not None:
 
             self._logger.debug(
-                f"Первый ответ: {first_response}"
+                f"Первый ответ: "
+                f"{first_response}"
             )
 
             await self.send_message(
                 json.dumps({
-                    "type": "in.text-direct/text",
-                    "text": "соединение установлено"
+                    "type":
+                        "in.text-direct/text",
+
+                    "text":
+                        "соединение установлено"
                 })
             )
 
@@ -401,17 +493,25 @@ class Gateway:
     # Прием сообщений
     # ==========================================================
 
-    async def listen_for_incoming_messages(self):
+    async def listen_for_incoming_messages(
+            self
+    ):
 
         while True:
 
             try:
-                response = await self.receive_message()
 
-                get_data = json.loads(response)
+                response = (
+                    await self.receive_message()
+                )
+
+                get_data = json.loads(
+                    response
+                )
 
                 self._logger.debug(
-                    f"ПОЛНОЕ ВХОДЯЩЕЕ СООБЩЕНИЕ: {get_data}"
+                    f"ПОЛНОЕ ВХОДЯЩЕЕ СООБЩЕНИЕ: "
+                    f"{get_data}"
                 )
 
                 if get_data.get("text") is not None:
@@ -423,112 +523,122 @@ class Gateway:
 
                 if get_data.get("altText") is not None:
 
-                    alt_text = get_data.get("altText")
-
                     self._logger.debug(
-                        f"получено >>> altText: {alt_text}"
+                        f"получено >>> altText: "
+                        f"{get_data.get('altText')}"
                     )
 
-                    self.handle_voice_command(
-                        alt_text
+                type_message = (
+                    get_data.get("type")
+                )
+
+                if type_message is None:
+                    continue
+
+                # --------------------------------------------------
+                # Сервер распознал голосовую команду.
+                #
+                # Саму команду здесь НЕ обрабатываем.
+                #
+                # Её обрабатывает серверный
+                # plugin_volume_commands.py.
+                #
+                # Здесь только запускаем индикацию ожидания
+                # голосового ответа.
+                # --------------------------------------------------
+
+                if type_message == (
+                    "in.stt.serverside/processed"
+                ):
+
+                    text = get_data.get(
+                        "text"
                     )
 
-                type_message = get_data.get("type")
+                    if text:
 
-                if type_message is not None:
-
-                    # --------------------------------------------------
-                    # Сервер распознал и обработал голосовую команду.
-                    # Теперь ждем ответ.
-                    # --------------------------------------------------
-
-                    if type_message == (
-                        "in.stt.serverside/processed"
-                    ):
-
-                        text = get_data.get("text")
-
-                        if text:
-
-                            self._logger.debug(
-                                f"Обработка голосовой команды: "
-                                f"{text}"
-                            )
-
-                            self.start_command_blink()
-
-                            self.handle_voice_command(text)
-
-                    # --------------------------------------------------
-                    # Mute
-                    # --------------------------------------------------
-
-                    if type_message == "in.mute/mute":
-
-                        self.voiceRecorder.resume(False)
-
-                    # --------------------------------------------------
-                    # Unmute
-                    # --------------------------------------------------
-
-                    if type_message == "in.mute/unmute":
-
-                        self.voiceRecorder.resume(True)
-
-                    # --------------------------------------------------
-                    # Команда изменения громкости.
-                    # --------------------------------------------------
-
-                    if type_message == "out.volume/command":
-
-                        self._logger.info(
-                            f"VOLUME RX: "
-                            f"typeMessage={type_message!r}, "
-                            f"get_data={get_data!r}"
+                        self._logger.debug(
+                            f"Обработка голосовой команды "
+                            f"сервером: {text}"
                         )
 
                         self.start_command_blink()
 
+                # --------------------------------------------------
+                # Mute
+                # --------------------------------------------------
+
+                if type_message == "in.mute/mute":
+
+                    self.voiceRecorder.resume(
+                        False
+                    )
+
+                # --------------------------------------------------
+                # Unmute
+                # --------------------------------------------------
+
+                if type_message == "in.mute/unmute":
+
+                    self.voiceRecorder.resume(
+                        True
+                    )
+
+                # --------------------------------------------------
+                # Команда изменения громкости от сервера.
+                # --------------------------------------------------
+
+                if type_message == (
+                    "out.volume/command"
+                ):
+
+                    self._logger.info(
+                        f"VOLUME RX: "
+                        f"typeMessage="
+                        f"{type_message!r}, "
+                        f"get_data="
+                        f"{get_data!r}"
+                    )
+
+                    self.start_command_blink()
+
+                    asyncio.create_task(
+                        self.handle_volume_command(
+                            get_data
+                        )
+                    )
+
+                # --------------------------------------------------
+                # Готовность дополнительного соединения STT.
+                # --------------------------------------------------
+
+                if type_message == (
+                    "in.stt.serverside/ready"
+                ):
+
+                    self.task_listen_second_connection = (
                         asyncio.create_task(
-                            self.handle_volume_command(
-                                get_data
+                            self.handle_connection(
+                                get_data.get("path"),
+                                self.samplerate
                             )
                         )
+                    )
 
-                    # --------------------------------------------------
-                    # Готовность дополнительного соединения STT.
-                    # --------------------------------------------------
+                # --------------------------------------------------
+                # Ответ сервера в виде аудио.
+                # --------------------------------------------------
 
-                    if type_message == (
-                        "in.stt.serverside/ready"
-                    ):
+                if (
+                    "out.audio.link/playback-request"
+                    in type_message
+                ):
 
-                        self.task_listen_second_connection = (
-                            asyncio.create_task(
-                                self.handle_connection(
-                                    get_data.get("path"),
-                                    self.samplerate
-                                )
-                            )
+                    asyncio.create_task(
+                        self.play_response_audio(
+                            get_data
                         )
-
-                    # --------------------------------------------------
-                    # Ответ сервера в виде аудио.
-                    # --------------------------------------------------
-
-                    if (
-                        "out.audio.link/playback-request"
-                        in type_message
-                    ):
-
-                        # Воспроизведение синхронное, поэтому запускаем
-                        # его в отдельном потоке. Это позволяет asyncio
-                        # продолжать работу и выполнять мигание LED.
-                        asyncio.create_task(
-                            self.play_response_audio(
-                                get_data
-                            )
-                        )
+                    )
 
             except websockets.ConnectionClosedError:
 
@@ -540,10 +650,12 @@ class Gateway:
                 self.command_pending = False
 
                 if self.command_blink_task is not None:
+
                     self.command_blink_task.cancel()
 
                     try:
                         await self.command_blink_task
+
                     except asyncio.CancelledError:
                         pass
 
@@ -560,9 +672,14 @@ class Gateway:
                     "Светодиод включен"
                 )
 
-                self.voiceRecorder.resume(False)
+                self.voiceRecorder.resume(
+                    False
+                )
 
-                for task in self.tasks_listen_recorder:
+                for task in (
+                    self.tasks_listen_recorder
+                ):
+
                     task.cancel()
 
                 self.tasks_listen_recorder.clear()
@@ -573,7 +690,10 @@ class Gateway:
     # Воспроизведение ответа
     # ==========================================================
 
-    async def play_response_audio(self, data):
+    async def play_response_audio(
+            self,
+            data
+    ):
 
         try:
 
@@ -605,10 +725,12 @@ class Gateway:
         if self.task_listen_second_connection is not None:
 
             self._logger.debug(
-                "Удаляем старое second_connection."
+                "Удаляем старое "
+                "second_connection."
             )
 
             self.task_listen_second_connection.cancel()
+
             self.task_listen_second_connection = None
 
         while True:
@@ -622,11 +744,14 @@ class Gateway:
             except Exception as e:
 
                 self._logger.exception(
-                    f"Повторное подключение не удалось: "
-                    f"{e}. Повторная попытка..."
+                    f"Повторное подключение "
+                    f"не удалось: {e}. "
+                    f"Повторная попытка..."
                 )
 
-                await asyncio.sleep(5)
+                await asyncio.sleep(
+                    5
+                )
 
     # ==========================================================
     # Дополнительное соединение для записи
@@ -640,7 +765,8 @@ class Gateway:
 
         async with websockets.connect(
             f"wss://{self.host}:{self.port}"
-            f"{in_path}?sample_rate={in_sample_rate}",
+            f"{in_path}"
+            f"?sample_rate={in_sample_rate}",
             ssl=self.ssl_context
         ) as websocket:
 
@@ -668,51 +794,74 @@ class Gateway:
             )
 
     # ==========================================================
-    # Обработка голосовых команд громкости
+    # Отправка текста серверу для озвучивания
     # ==========================================================
 
-    def handle_voice_command(self, text):
+    async def send_text_for_speech(
+            self,
+            text
+    ):
 
-        if self.volumeControl is None:
+        if self.websocket is None:
 
             self._logger.warning(
-                "VolumeControl не подключен."
+                "Невозможно отправить текст: "
+                "WebSocket не подключен."
             )
 
             return False
 
-        if text is None:
+        try:
+
+            message = {
+                "type":
+                    "in.text-direct/text",
+
+                "text":
+                    text
+            }
+
+            self._logger.debug(
+                f"Отправляем текст "
+                f"для озвучивания: "
+                f"{text!r}"
+            )
+
+            await self.send_message(
+                json.dumps(message)
+            )
+
+            return True
+
+        except Exception as e:
+
+            self._logger.exception(
+                "Ошибка отправки текста "
+                f"для озвучивания: {e}"
+            )
+
             return False
-
-        text = text.strip().lower()
-
-        if text == "громче":
-
-            self._logger.info(
-                "Команда громкости: громче"
-            )
-
-            return self.volumeControl.volume_up()
-
-        if text == "тише":
-
-            self._logger.info(
-                "Команда громкости: тише"
-            )
-
-            return self.volumeControl.volume_down()
-
-        return False
 
     # ==========================================================
     # Обработка out.volume/command
     # ==========================================================
 
-    async def handle_volume_command(self, data):
+    async def handle_volume_command(
+            self,
+            data
+    ):
 
-        command_id = data.get("commandId")
-        command = data.get("command")
-        value = data.get("value")
+        command_id = data.get(
+            "commandId"
+        )
+
+        command = data.get(
+            "command"
+        )
+
+        value = data.get(
+            "value"
+        )
 
         self._logger.debug(
             f"Обработка out.volume: "
@@ -734,7 +883,9 @@ class Gateway:
 
             await self.send_message(
                 json.dumps({
-                    "type": "out.volume/result",
+                    "type":
+                        "out.volume/result",
+
                     **result
                 })
             )
@@ -745,39 +896,114 @@ class Gateway:
 
         try:
 
+            # --------------------------------------------------
+            # Увеличение громкости.
+            # --------------------------------------------------
+
             if command == "up":
 
-                success = self.volumeControl.volume_up()
+                success = (
+                    self.volumeControl.volume_up()
+                )
+
+            # --------------------------------------------------
+            # Уменьшение громкости.
+            # --------------------------------------------------
 
             elif command == "down":
 
-                success = self.volumeControl.volume_down()
+                success = (
+                    self.volumeControl.volume_down()
+                )
+
+            # --------------------------------------------------
+            # Установка абсолютного значения.
+            #
+            # Значение трактуется как пользовательские
+            # проценты 0..100.
+            # --------------------------------------------------
 
             elif command == "set":
 
-                success = self.volumeControl.set_volume(
-                    value
+                success = (
+                    self.volumeControl.set_volume_percent(
+                        value
+                    )
                 )
+
+            # --------------------------------------------------
+            # Получение текущей громкости.
+            #
+            # Возвращаем пользовательский уровень 0..100%.
+            # --------------------------------------------------
+
+            elif command == "get":
+
+                current_volume = (
+                    self.volumeControl.get_volume_percent()
+                )
+
+                if current_volume is None:
+
+                    success = False
+
+                else:
+
+                    success = True
+
+                    result["volume"] = (
+                        current_volume
+                    )
+
+            # --------------------------------------------------
+            # Минимальная громкость.
+            # --------------------------------------------------
 
             elif command == "min":
 
-                success = self.volumeControl.volume_min()
+                success = (
+                    self.volumeControl.volume_min()
+                )
+
+            # --------------------------------------------------
+            # Средняя громкость.
+            # --------------------------------------------------
 
             elif command == "middle":
 
-                success = self.volumeControl.volume_middle()
+                success = (
+                    self.volumeControl.volume_middle()
+                )
+
+            # --------------------------------------------------
+            # Максимальная громкость.
+            # --------------------------------------------------
 
             elif command == "max":
 
-                success = self.volumeControl.volume_max()
+                success = (
+                    self.volumeControl.volume_max()
+                )
+
+            # --------------------------------------------------
+            # Физический mute.
+            # --------------------------------------------------
 
             elif command == "mute":
 
-                success = self.volumeControl.volume_mute()
+                success = (
+                    self.volumeControl.volume_mute()
+                )
+
+            # --------------------------------------------------
+            # Возврат к средней громкости.
+            # --------------------------------------------------
 
             elif command == "unmute":
 
-                success = self.volumeControl.volume_unmute()
+                success = (
+                    self.volumeControl.volume_unmute()
+                )
 
             else:
 
@@ -794,19 +1020,36 @@ class Gateway:
                 f"type={type(success).__name__}"
             )
 
-            result["success"] = bool(success)
+            result["success"] = bool(
+                success
+            )
 
-            if success:
+            # --------------------------------------------------
+            # Для команд изменения громкости возвращаем
+            # актуальное значение.
+            #
+            # Для "get" оно уже получено выше.
+            # --------------------------------------------------
+
+            if (
+                success
+                and command != "get"
+            ):
 
                 current_volume = (
-                    self.volumeControl.get_volume()
+                    self.volumeControl.get_volume_percent()
                 )
 
                 if current_volume is not None:
-                    result["volume"] = current_volume
+
+                    result["volume"] = (
+                        current_volume
+                    )
 
             response = {
-                "type": "out.volume/result",
+                "type":
+                    "out.volume/result",
+
                 **result
             }
 
@@ -827,13 +1070,16 @@ class Gateway:
         except Exception as e:
 
             self._logger.exception(
-                f"Ошибка обработки команды громкости: {e}"
+                f"Ошибка обработки "
+                f"команды громкости: {e}"
             )
 
             result["success"] = False
 
             response = {
-                "type": "out.volume/result",
+                "type":
+                    "out.volume/result",
+
                 **result
             }
 
