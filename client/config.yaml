@@ -21,3 +21,7 @@ volume:
   min: 0
   middle: 112
   max: 127
+
+  user_min: 76
+  user_middle: 112
+  user_max: 127
