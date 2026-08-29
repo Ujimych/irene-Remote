@@ -13,7 +13,7 @@ from irene_plugin_web_face.protocol import (
 
 
 name = 'plugin_out_volume'
-version = '0.2.0'
+version = '0.3.0'
 
 
 class VolumeCommandResult:
@@ -34,7 +34,7 @@ class VolumeOutputChannel(OutputChannel):
     """
     Канал управления громкостью на клиенте.
 
-    Само управление выполняется через протокол out.volume.
+    Управление выполняется через протокол out.volume.
     """
 
     __slots__ = ('_protocol',)
@@ -47,7 +47,7 @@ class VolumeOutputChannel(OutputChannel):
 
     def volume_down(self) -> VolumeCommandResult:
         return self._protocol.volume_down()
-        
+
     def volume_min(self) -> VolumeCommandResult:
         return self._protocol.volume_min()
 
@@ -57,8 +57,17 @@ class VolumeOutputChannel(OutputChannel):
     def volume_max(self) -> VolumeCommandResult:
         return self._protocol.volume_max()
 
-    def set_volume(self, volume: int) -> VolumeCommandResult:
-        return self._protocol.set_volume(volume)
+    def set_volume(
+            self,
+            volume: int
+    ) -> VolumeCommandResult:
+
+        return self._protocol.set_volume(
+            volume
+        )
+
+    def get_volume(self) -> VolumeCommandResult:
+        return self._protocol.get_volume()
 
     def mute(self) -> VolumeCommandResult:
         return self._protocol.mute()
@@ -77,9 +86,15 @@ class _VolumeProtocolHandler(ProtocolHandler):
 
     proto_name = PROTOCOL_OUT_VOLUME
 
-    def __init__(self, connection: Connection):
+    def __init__(
+            self,
+            connection: Connection
+    ):
+
         self._connection = connection
+
         self._lock = threading.Lock()
+
         self._pending: dict[
             str,
             tuple[threading.Event, dict[str, Any]]
@@ -90,7 +105,9 @@ class _VolumeProtocolHandler(ProtocolHandler):
             self._handle_result,
         )
 
-        self._output_channel = VolumeOutputChannel(self)
+        self._output_channel = VolumeOutputChannel(
+            self
+        )
 
         self._connection.register_output(
             self._output_channel
@@ -100,22 +117,40 @@ class _VolumeProtocolHandler(ProtocolHandler):
         pass
 
     def terminate(self):
+
         with self._lock:
-            pending = list(self._pending.values())
+
+            pending = list(
+                self._pending.values()
+            )
+
             self._pending.clear()
 
         for event, result in pending:
-            result['value'] = VolumeCommandResult(False)
+
+            result['value'] = (
+                VolumeCommandResult(False)
+            )
+
             event.set()
 
-    def _handle_result(self, payload: dict):
-        command_id = payload.get('commandId')
+    def _handle_result(
+            self,
+            payload: dict
+    ):
+
+        command_id = payload.get(
+            'commandId'
+        )
 
         if not command_id:
             return
 
         with self._lock:
-            pending = self._pending.get(command_id)
+
+            pending = self._pending.get(
+                command_id
+            )
 
         if pending is None:
             return
@@ -123,9 +158,18 @@ class _VolumeProtocolHandler(ProtocolHandler):
         event, result = pending
 
         result['value'] = VolumeCommandResult(
-            success=bool(payload.get('success', False)),
-            volume=payload.get('volume'),
-            muted=payload.get('muted'),
+            success=bool(
+                payload.get(
+                    'success',
+                    False
+                )
+            ),
+            volume=payload.get(
+                'volume'
+            ),
+            muted=payload.get(
+                'muted'
+            ),
         )
 
         event.set()
@@ -137,12 +181,16 @@ class _VolumeProtocolHandler(ProtocolHandler):
             timeout: float = 3.0,
     ) -> VolumeCommandResult:
 
-        command_id = str(uuid.uuid4())
+        command_id = str(
+            uuid.uuid4()
+        )
 
         event = threading.Event()
+
         result: dict[str, Any] = {}
 
         with self._lock:
+
             self._pending[command_id] = (
                 event,
                 result,
@@ -154,16 +202,21 @@ class _VolumeProtocolHandler(ProtocolHandler):
         }
 
         if value is not None:
+
             payload['value'] = value
 
         try:
+
             self._connection.send_message(
                 MT_OUT_VOLUME_COMMAND,
                 payload,
             )
 
             if not event.wait(timeout):
-                return VolumeCommandResult(False)
+
+                return VolumeCommandResult(
+                    False
+                )
 
             return result.get(
                 'value',
@@ -171,32 +224,71 @@ class _VolumeProtocolHandler(ProtocolHandler):
             )
 
         finally:
+
             with self._lock:
-                self._pending.pop(command_id, None)
+
+                self._pending.pop(
+                    command_id,
+                    None
+                )
 
     def volume_up(self) -> VolumeCommandResult:
-        return self._send_command('up')
+
+        return self._send_command(
+            'up'
+        )
 
     def volume_down(self) -> VolumeCommandResult:
-        return self._send_command('down')
-        
+
+        return self._send_command(
+            'down'
+        )
+
     def volume_min(self) -> VolumeCommandResult:
-        return self._send_command('min')
+
+        return self._send_command(
+            'min'
+        )
 
     def volume_middle(self) -> VolumeCommandResult:
-        return self._send_command('middle')
+
+        return self._send_command(
+            'middle'
+        )
 
     def volume_max(self) -> VolumeCommandResult:
-        return self._send_command('max')
 
-    def set_volume(self, volume: int) -> VolumeCommandResult:
-        return self._send_command('set', int(volume))
+        return self._send_command(
+            'max'
+        )
+
+    def set_volume(
+            self,
+            volume: int
+    ) -> VolumeCommandResult:
+
+        return self._send_command(
+            'set',
+            int(volume)
+        )
+
+    def get_volume(self) -> VolumeCommandResult:
+
+        return self._send_command(
+            'get'
+        )
 
     def mute(self) -> VolumeCommandResult:
-        return self._send_command('mute')
+
+        return self._send_command(
+            'mute'
+        )
 
     def unmute(self) -> VolumeCommandResult:
-        return self._send_command('unmute')
+
+        return self._send_command(
+            'unmute'
+        )
 
 
 def init_client_protocol(
@@ -207,7 +299,7 @@ def init_client_protocol(
         pm: PluginManager,
         *args,
         **kwargs):
-        
+
     print(
         f"VOLUME DEBUG: init_client_protocol called, "
         f"proto_name={proto_name!r}, "
@@ -216,7 +308,13 @@ def init_client_protocol(
     )
 
     if proto_name == PROTOCOL_OUT_VOLUME:
-        prev = prev or _VolumeProtocolHandler(connection)
+
+        prev = (
+            prev
+            or _VolumeProtocolHandler(
+                connection
+            )
+        )
 
     return nxt(
         prev,
