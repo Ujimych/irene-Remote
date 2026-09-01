@@ -7,6 +7,9 @@ import ssl
 import RPi.GPIO as GPIO
 import websockets
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 class Gateway:
 
     LISTEN_TIMEOUT = 60
@@ -50,12 +53,25 @@ class Gateway:
         self.led_on = True
         GPIO.output(self.LED_PIN, GPIO.HIGH)
         self._logger.debug("Светодиод включен")
+        self.silence_time_start = in_config["silence_time"]["start"]
+        self.silence_time_end = in_config["silence_time"]["end"]
 
     def start_command_blink(self):
         self.command_pending = True
         if self.command_blink_task is None:
             self._logger.debug("Начинаем мигание: ожидание ответа от сервера.")
             self.command_blink_task = asyncio.create_task(self._command_blink())
+
+    def is_silent_period(self, start_str="23:30", end_str="07:00"):
+        tz = ZoneInfo("Europe/Moscow")
+        now = datetime.now(tz).time()
+        start = datetime.strptime(start_str, "%H:%M").time()
+        end = datetime.strptime(end_str, "%H:%M").time()
+
+        if start <= end:
+            return start <= now <= end
+        else:
+            return now >= start or now <= end
 
     async def stop_command_blink(self):
         self.command_pending = False
@@ -238,7 +254,11 @@ class Gateway:
 
         if first_response is not None:
             self._logger.debug(f"Первый ответ: {first_response}")
+
+        if not self.is_silent_period(self.silence_time_start, self.silence_time_end):
             await self.send_message(json.dumps({"type": "in.text-direct/text", "text": "соединение установлено"}))
+        else:
+            self._logger.debug("Подтверждение не отправлено: сейчас период тишины.")
 
     async def listen_for_incoming_messages(self):
         while True:
