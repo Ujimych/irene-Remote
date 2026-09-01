@@ -25,3 +25,7 @@ volume:
   user_min: 76
   user_middle: 112
   user_max: 127
+
+silence_time:
+  start: '23:30'
+  end: '07:00'
